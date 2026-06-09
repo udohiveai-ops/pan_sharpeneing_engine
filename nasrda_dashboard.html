@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NASRDA Pan-Sharpening Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<style>
+:root{--bg:#05080F;--bg2:#0B1120;--bg3:#111B2E;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);--text:#E8EDF5;--muted:#8B96A8;--dim:#4A5568;--green:#1DB87E;--gg:rgba(29,184,126,0.12);--amber:#F59E0B;--ag:rgba(245,158,11,0.12);--blue:#3B82F6;--red:#EF4444;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;--r:10px;--rl:16px;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans),sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6;overflow-x:hidden;}
+header{position:sticky;top:0;z-index:100;background:rgba(5,8,15,0.95);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:14px;height:56px;}
+.logo{width:30px;height:30px;background:var(--green);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-text{font-size:12px;font-weight:700;letter-spacing:.08em;}
+.logo-sub{font-size:11px;color:var(--muted);}
+.pill{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--green);background:var(--gg);border:1px solid rgba(29,184,126,.25);border-radius:20px;padding:4px 10px;}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.shell{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 56px);}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;}
+.slabel{font-size:10px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;}
+.method-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.mc{border:1px solid var(--border);border-radius:var(--r);padding:10px 6px;cursor:pointer;transition:all .2s;text-align:center;}
+.mc:hover,.mc.active{border-color:var(--green);background:var(--gg);}
+.mc-name{font-size:11px;font-weight:700;color:var(--text);}
+.mc-desc{font-size:9px;color:var(--muted);margin-top:3px;}
+.dz{border:1.5px dashed var(--border2);border-radius:var(--rl);padding:14px;text-align:center;cursor:pointer;transition:all .25s;background:rgba(255,255,255,.02);position:relative;margin-bottom:8px;}
+.dz:hover,.dz.over{border-color:var(--green);background:var(--gg);}
+.dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.dz-icon{font-size:20px;margin-bottom:4px;}
+.dz-title{font-size:11px;font-weight:700;color:var(--green);}
+.dz-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.dz-ok{font-size:10px;color:var(--green);margin-top:4px;display:none;}
+.res-row{display:flex;align-items:center;justify-content:space-between;}
+.res-row span{font-size:12px;color:var(--muted);}
+select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:5px 8px;font-size:11px;cursor:pointer;outline:none;}
+select:focus{border-color:var(--green);}
+hr.div{border:none;border-top:1px solid var(--border);margin:2px 0;}
+.run-btn{width:100%;background:var(--green);color:#020F08;border:none;border-radius:var(--r);padding:12px;font-size:12px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.run-btn:hover{background:#22D490;transform:translateY(-1px);}
+.run-btn:disabled{background:var(--dim);cursor:not-allowed;transform:none;}
+.prog-wrap{display:none;margin-top:8px;}
+.prog-wrap.show{display:block;}
+.prog-track{height:3px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--green);width:0%;transition:width .4s ease;}
+.prog-lbl{font-size:10px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;}
+.main{display:flex;flex-direction:column;overflow:hidden;}
+.stage-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 20px;flex-shrink:0;}
+.stage-row{display:flex;align-items:center;gap:6px;overflow-x:auto;}
+.ss{flex-shrink:0;border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;text-align:center;min-width:120px;transition:all .3s;}
+.ss .sn{font-size:9px;color:var(--dim);margin-bottom:2px;}
+.ss .sm{font-size:11px;font-weight:500;color:var(--muted);}
+.ss .st{font-size:9px;color:var(--dim);margin-top:2px;}
+.ss.running{border-color:var(--amber);background:var(--ag);animation:throb 1s ease-in-out infinite;}
+.ss.running .sm,.ss.running .st{color:var(--amber);}
+.ss.done{border-color:var(--green);background:var(--gg);}
+.ss.done .sm,.ss.done .st{color:var(--green);}
+@keyframes throb{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 4px rgba(245,158,11,.15)}}
+.arr{color:var(--dim);font-size:16px;flex-shrink:0;}
+.tabs{display:flex;border-bottom:1px solid var(--border);padding:0 20px;background:var(--bg2);flex-shrink:0;}
+.tab{font-size:11px;letter-spacing:.06em;color:var(--dim);padding:13px 14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s;}
+.tab:hover{color:var(--muted);}
+.tab.active{color:var(--green);border-bottom-color:var(--green);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+.content{flex:1;overflow-y:auto;padding:20px;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;}
+.sc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;}
+.sk{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}
+.sv{font-size:20px;font-weight:600;}
+.sd{font-size:10px;color:var(--muted);margin-top:2px;}
+.sg{color:var(--green);}.sa{color:var(--amber);}.sb{color:var(--blue);}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.ic{border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;background:var(--bg3);position:relative;}
+.ib{position:absolute;top:10px;left:10px;z-index:2;font-size:10px;padding:3px 9px;border-radius:20px;letter-spacing:.05em;}
+.bms{background:rgba(59,130,246,.2);color:#93C5FD;border:1px solid rgba(59,130,246,.3);}
+.bpan{background:rgba(245,158,11,.2);color:#FCD34D;border:1px solid rgba(245,158,11,.3);}
+.bfused{background:rgba(29,184,126,.2);color:var(--green);border:1px solid rgba(29,184,126,.3);}
+canvas.ci{width:100%;aspect-ratio:1;display:block;}
+.im{padding:8px 12px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px;}
+.mkv{font-size:10px;}
+.mk{color:var(--dim);}.mv{color:var(--text);}
+.log-box{background:#030509;border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:11px;height:calc(100vh - 300px);min-height:260px;overflow-y:auto;line-height:1.8;}
+.ll{display:flex;gap:10px;font-family:monospace;}
+.lt{color:var(--dim);flex-shrink:0;}
+.li{color:var(--blue);}.lk{color:var(--green);}.lw{color:var(--amber);}.le{color:var(--red);}.lm{color:var(--muted);}
+.dl-btn{width:100%;margin-top:8px;border-radius:var(--r);padding:11px;font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:all .2s;border:none;}
+.dl-real{background:#0A2342;color:var(--green);border:1px solid var(--green) !important;}
+.dl-prev{background:#0A2342;color:var(--amber);border:1px solid var(--amber) !important;}
+.dl-note{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5;padding:0 2px;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cursor{display:inline-block;width:6px;height:12px;background:var(--green);animation:blink 1s step-end infinite;vertical-align:middle;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+      <rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/>
+      <rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>
+    </svg>
+  </div>
+  <div>
+    <div class="logo-text">NASRDA &middot; PAN-SHARPENING ENGINE</div>
+    <div class="logo-sub">Automated MS + PAN Fusion &middot; v2.0.0</div>
+  </div>
+  <div class="pill"><div class="dot"></div>SYSTEM ONLINE</div>
+</header>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div>
+      <div class="slabel">Algorithm</div>
+      <div class="method-grid" id="method-grid">
+        <div class="mc" data-m="brovey"><div class="mc-name">BROVEY</div><div class="mc-desc">Any bands. Fast.</div></div>
+        <div class="mc active" data-m="ihs"><div class="mc-name">IHS</div><div class="mc-desc">Best colour.</div></div>
+        <div class="mc" data-m="gram_schmidt"><div class="mc-name">GRAM-S</div><div class="mc-desc">Best fidelity.</div></div>
+      </div>
+    </div>
+    <hr class="div">
+    <div>
+      <div class="slabel">Input Images</div>
+      <div class="dz" id="dz-ms">
+        <input type="file" id="fi-ms" accept=".tif,.tiff,.png,.jpg,.jpeg">
+        <div class="dz-icon">&#127752;</div>
+        <div class="dz-title">MULTISPECTRAL (MS)</div>
+        <div class="dz-sub">Low-resolution colour bands</div>
+        <div class="dz-ok" id="ms-ok">&#10003; loaded</div>
+      </div>
+      <div class="dz" id="dz-pan">
+        <input type="file" id="fi-pan" accept=".tif,.tiff,.png,.jpg,.jpeg">
+        <div class="dz-icon">&#11036;</div>
+        <div class="dz-title">PANCHROMATIC (PAN)</div>
+        <div class="dz-sub">High-resolution single band</div>
+        <div class="dz-ok" id="pan-ok">&#10003; loaded</div>
+      </div>
+    </div>
+    <hr class="div">
+    <div>
+      <div class="slabel">Resampling</div>
+      <div class="res-row">
+        <span>MS alignment</span>
+        <select id="sel-res">
+          <option value="bilinear" selected>Bilinear</option>
+          <option value="bicubic">Bicubic</option>
+          <option value="nearest">Nearest</option>
+        </select>
+      </div>
+    </div>
+    <hr class="div">
+    <button class="run-btn" id="run-btn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      RUN PAN-SHARPENING
+    </button>
+    <div class="prog-wrap" id="prog-wrap">
+      <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+      <div class="prog-lbl"><span id="prog-stage">Waiting...</span><span id="prog-pct">0%</span></div>
+    </div>
+    <div id="dl-area"></div>
+  </aside>
+
+  <main class="main">
+    <div class="stage-bar">
+      <div class="stage-row">
+        <div class="ss" id="ps-0"><div class="sn">01</div><div class="sm">Alignment</div><div class="st">waiting</div></div>
+        <div class="arr">&rsaquo;</div>
+        <div class="ss" id="ps-1"><div class="sn">02</div><div class="sm">Colour Sep.</div><div class="st">waiting</div></div>
+        <div class="arr">&rsaquo;</div>
+        <div class="ss" id="ps-2"><div class="sn">03</div><div class="sm">Fusion</div><div class="st">waiting</div></div>
+        <div class="arr">&rsaquo;</div>
+        <div class="ss" id="ps-3"><div class="sn">04</div><div class="sm">Export</div><div class="st">waiting</div></div>
+      </div>
+    </div>
+
+    <nav class="tabs">
+      <div class="tab active" data-tab="compare" onclick="switchTab(this)">BEFORE / AFTER</div>
+      <div class="tab" data-tab="log" onclick="switchTab(this)">PIPELINE LOG</div>
+    </nav>
+
+    <div class="content">
+      <div class="tab-panel active" id="tab-compare">
+        <div class="stats-row">
+          <div class="sc"><div class="sk">MS Bands</div><div class="sv sb" id="st-ms">-</div><div class="sd">multispectral</div></div>
+          <div class="sc"><div class="sk">PAN Size</div><div class="sv sa" id="st-pan">-</div><div class="sd">panchromatic</div></div>
+          <div class="sc"><div class="sk">Output</div><div class="sv sg" id="st-out">-</div><div class="sd">fused size</div></div>
+          <div class="sc"><div class="sk">Runtime</div><div class="sv sg" id="st-rt">-</div><div class="sd">processing</div></div>
+        </div>
+        <div class="cmp">
+          <div class="ic">
+            <div class="ib bms">MULTISPECTRAL</div>
+            <canvas class="ci" id="cv-ms" width="512" height="512"></canvas>
+            <div class="im">
+              <div class="mkv"><span class="mk">BANDS: </span><span class="mv" id="m-ms-b">-</span></div>
+              <div class="mkv"><span class="mk">SIZE: </span><span class="mv" id="m-ms-s">-</span></div>
+            </div>
+          </div>
+          <div class="ic">
+            <div class="ib bfused">PAN-SHARPENED</div>
+            <canvas class="ci" id="cv-fused" width="512" height="512"></canvas>
+            <div class="im">
+              <div class="mkv"><span class="mk">METHOD: </span><span class="mv sg" id="m-method">-</span></div>
+              <div class="mkv"><span class="mk">SIZE: </span><span class="mv" id="m-fused-s">-</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          <div class="slabel" style="margin-bottom:8px;">Panchromatic Input</div>
+          <div class="ic">
+            <div class="ib bpan">PANCHROMATIC</div>
+            <canvas id="cv-pan" width="512" height="128" style="width:100%;display:block;aspect-ratio:4/1;"></canvas>
+            <div class="im">
+              <div class="mkv"><span class="mk">SIZE: </span><span class="mv" id="m-pan-s">-</span></div>
+              <div class="mkv"><span class="mk">TYPE: </span><span class="mv sa">Greyscale hi-res</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-log">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-size:13px;font-weight:500;">Pipeline Log</div>
+          <button onclick="clearLog()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:var(--r);padding:4px 10px;cursor:pointer;font-size:11px;">CLEAR</button>
+        </div>
+        <div class="log-box" id="log-box"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── API base ──────────────────────────────────────────────────
+var API = "http://localhost:5000/api";
+
+// ── State ─────────────────────────────────────────────────────
+var S = {
+  method: "ihs",
+  msData: null, panData: null,
+  msW: 0, msH: 0, msBands: 1,
+  panW: 0, panH: 0,
+  msRGBA: null,
+  msFile: null, panFile: null,
+  jobId: null, pollTimer: null,
+  lastLogCount: 0
+};
+
+// ── Init log ──────────────────────────────────────────────────
+addLog("INFO", "NASRDA Pan-Sharpening Engine v2.0.0 - ready.");
+addLog("INFO", "Upload MS and PAN images, select algorithm, then click RUN.");
+
+drawPH("cv-ms", "ms");
+drawPH("cv-pan", "pan");
+drawPH("cv-fused", "fused");
+
+// ── Tab switching ─────────────────────────────────────────────
+function switchTab(el) {
+  document.querySelectorAll(".tab").forEach(function(t) { t.classList.remove("active"); });
+  document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+  el.classList.add("active");
+  document.getElementById("tab-" + el.dataset.tab).classList.add("active");
+}
+
+// ── Method selector ───────────────────────────────────────────
+document.getElementById("method-grid").addEventListener("click", function(e) {
+  var c = e.target.closest(".mc");
+  if (!c) return;
+  document.querySelectorAll(".mc").forEach(function(x) { x.classList.remove("active"); });
+  c.classList.add("active");
+  S.method = c.dataset.m;
+});
+
+// ── Drop zones ────────────────────────────────────────────────
+function setupDrop(dzId, fiId, type) {
+  var dz = document.getElementById(dzId);
+  var fi = document.getElementById(fiId);
+  fi.addEventListener("change", function(e) {
+    if (e.target.files[0]) loadFile(e.target.files[0], type);
+  });
+  dz.addEventListener("dragover", function(e) { e.preventDefault(); dz.classList.add("over"); });
+  dz.addEventListener("dragleave", function() { dz.classList.remove("over"); });
+  dz.addEventListener("drop", function(e) {
+    e.preventDefault(); dz.classList.remove("over");
+    if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0], type);
+  });
+}
+setupDrop("dz-ms", "fi-ms", "ms");
+setupDrop("dz-pan", "fi-pan", "pan");
+
+// ── Load file ─────────────────────────────────────────────────
+function loadFile(file, type) {
+  if (type === "ms") S.msFile = file;
+  else S.panFile = file;
+  var name = file.name.toLowerCase();
+  addLog("INFO", "Loading " + type.toUpperCase() + ": " + file.name + " (" + (file.size / 1048576).toFixed(1) + " MB)");
+  if (name.endsWith(".tif") || name.endsWith(".tiff")) loadGeoTIFF(file, type);
+  else loadImg(file, type);
+}
+
+// ── GeoTIFF loader ────────────────────────────────────────────
+function loadGeoTIFF(file, type) {
+  file.arrayBuffer().then(function(buf) {
+    return GeoTIFF.fromArrayBuffer(buf);
+  }).then(function(tiff) {
+    return tiff.getImage().then(function(img) {
+      return img.readRasters().then(function(rasters) {
+        var w = img.getWidth(), h = img.getHeight(), nb = img.getSamplesPerPixel();
+        addLog("INFO", "  " + w + " x " + h + " px  |  " + nb + " band(s)");
+        if (type === "ms") {
+          S.msData = rasters; S.msW = w; S.msH = h; S.msBands = nb;
+          document.getElementById("m-ms-b").textContent = nb;
+          document.getElementById("m-ms-s").textContent = w + " x " + h;
+          document.getElementById("st-ms").textContent = nb + "B";
+          document.getElementById("ms-ok").style.display = "block";
+          renderGTIFF("cv-ms", rasters, w, h, nb, "ms");
+        } else {
+          S.panData = rasters; S.panW = w; S.panH = h;
+          document.getElementById("m-pan-s").textContent = w + " x " + h;
+          document.getElementById("st-pan").textContent = w + "x" + h;
+          document.getElementById("pan-ok").style.display = "block";
+          renderGTIFF("cv-pan", rasters, w, h, 1, "pan");
+        }
+        addLog("OK", "  " + type.toUpperCase() + " loaded successfully.");
+      });
+    });
+  }).catch(function(err) {
+    addLog("WARN", "  GeoTIFF decode error: " + err.message);
+    drawPH(type === "ms" ? "cv-ms" : "cv-pan", type);
+  });
+}
+
+// ── Regular image loader ──────────────────────────────────────
+function loadImg(file, type) {
+  var url = URL.createObjectURL(file);
+  var img = new Image();
+  img.onload = function() {
+    var cid = type === "ms" ? "cv-ms" : "cv-pan";
+    var cv = document.getElementById(cid);
+    var ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    var sc = Math.min(cv.width / img.width, cv.height / img.height);
+    var sw = img.width * sc, sh = img.height * sc;
+    ctx.drawImage(img, (cv.width - sw) / 2, (cv.height - sh) / 2, sw, sh);
+    var tmp = document.createElement("canvas");
+    tmp.width = cv.width; tmp.height = cv.height;
+    var tc = tmp.getContext("2d");
+    tc.drawImage(img, (cv.width - sw) / 2, (cv.height - sh) / 2, sw, sh);
+    if (type === "ms") {
+      S.msData = "rgba"; S.msW = cv.width; S.msH = cv.height; S.msBands = 3;
+      S.msRGBA = tc.getImageData(0, 0, cv.width, cv.height);
+      document.getElementById("m-ms-b").textContent = "3";
+      document.getElementById("m-ms-s").textContent = img.width + " x " + img.height;
+      document.getElementById("st-ms").textContent = "3B";
+      document.getElementById("ms-ok").style.display = "block";
+    } else {
+      S.panData = "rgba"; S.panW = cv.width; S.panH = cv.height;
+      document.getElementById("m-pan-s").textContent = img.width + " x " + img.height;
+      document.getElementById("st-pan").textContent = img.width + "x" + img.height;
+      document.getElementById("pan-ok").style.display = "block";
+    }
+    URL.revokeObjectURL(url);
+    addLog("OK", "  " + type.toUpperCase() + " rendered.");
+  };
+  img.src = url;
+}
+
+// ── Render GeoTIFF to canvas ──────────────────────────────────
+function renderGTIFF(cid, rasters, srcW, srcH, nb, type) {
+  var cv = document.getElementById(cid);
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  var id = ctx.createImageData(W, H), d = id.data;
+  var b0 = rasters[0];
+  var b1 = nb >= 3 ? rasters[1] : rasters[0];
+  var b2 = nb >= 3 ? rasters[2] : rasters[0];
+  function pc(arr, p) { var s = Float64Array.from(arr).sort(); return s[Math.floor(s.length * (p / 100))]; }
+  function mk(arr) { var lo = pc(arr, 2), hi = pc(arr, 98), r = hi - lo + 1e-9; return function(v) { return Math.max(0, Math.min(255, Math.round(((v - lo) / r) * 255))); }; }
+  var n0 = mk(b0), n1 = mk(b1), n2 = mk(b2);
+  for (var cy = 0; cy < H; cy++) {
+    for (var cx = 0; cx < W; cx++) {
+      var sx = Math.floor((cx / W) * srcW), sy = Math.floor((cy / H) * srcH);
+      var si = sy * srcW + sx, di = (cy * W + cx) * 4;
+      if (type === "pan") { var g = n0(b0[si]); d[di] = g; d[di+1] = g; d[di+2] = g; }
+      else { d[di] = n0(b0[si]); d[di+1] = n1(b1[si]); d[di+2] = n2(b2[si]); }
+      d[di+3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+// ── Run pipeline ──────────────────────────────────────────────
+document.getElementById("run-btn").addEventListener("click", function() {
+  if (!S.msFile || !S.panFile) {
+    addLog("WARN", "Upload both MS and PAN images first.");
+    return;
+  }
+  var btn = document.getElementById("run-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="cursor"></span> SENDING TO ENGINE...';
+  document.getElementById("prog-wrap").classList.add("show");
+  document.getElementById("dl-area").innerHTML = "";
+  S.lastLogCount = 0;
+
+  for (var i = 0; i < 4; i++) {
+    var p = document.getElementById("ps-" + i);
+    p.classList.remove("running", "done");
+    p.querySelector(".st").textContent = "waiting";
+  }
+
+  addLog("INFO", "Submitting to Python engine — method: " + S.method.toUpperCase());
+
+  var form = new FormData();
+  form.append("ms_file",  S.msFile);
+  form.append("pan_file", S.panFile);
+  form.append("method",   S.method);
+  form.append("resample", document.getElementById("sel-res").value);
+
+  fetch(API + "/run", { method: "POST", body: form })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        addLog("ERR", "Server error: " + data.error);
+        resetBtn(); return;
+      }
+      S.jobId = data.job_id;
+      addLog("INFO", "Job accepted — ID: " + S.jobId);
+      btn.innerHTML = '<span class="cursor"></span> PROCESSING...';
+      startPolling();
+    })
+    .catch(function(err) {
+      addLog("ERR", "Cannot reach server: " + err.message);
+      addLog("WARN", "Make sure server.py is running: python server.py");
+      addLog("WARN", "Then refresh this page at http://localhost:5000");
+      resetBtn();
+    });
+});
+
+// ── Polling ───────────────────────────────────────────────────
+var SNAMES = ["Alignment", "Colour Sep.", "Fusion", "Export"];
+
+function startPolling() {
+  S.pollTimer = setInterval(pollStatus, 800);
+}
+
+function pollStatus() {
+  fetch(API + "/status/" + S.jobId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var logs = data.logs || [];
+      for (var i = S.lastLogCount; i < logs.length; i++) {
+        addLog(logs[i].level, logs[i].msg);
+      }
+      S.lastLogCount = logs.length;
+
+      var stage = data.stage || 0;
+      for (var s = 0; s < 4; s++) {
+        var card = document.getElementById("ps-" + s);
+        card.classList.remove("running", "done");
+        if (s < stage - 1) { card.classList.add("done"); card.querySelector(".st").textContent = "complete"; }
+        else if (s === stage - 1) { card.classList.add("running"); card.querySelector(".st").textContent = "running..."; }
+        else { card.querySelector(".st").textContent = "waiting"; }
+      }
+
+      var pct = stage > 0 ? Math.round((stage / 4) * 100) : 5;
+      document.getElementById("prog-fill").style.width = pct + "%";
+      document.getElementById("prog-pct").textContent = pct + "%";
+      if (stage > 0) document.getElementById("prog-stage").textContent = SNAMES[stage - 1];
+
+      if (data.status === "complete") {
+        clearInterval(S.pollTimer);
+        pipelineDone(data.result);
+      } else if (data.status === "failed") {
+        clearInterval(S.pollTimer);
+        addLog("ERR", "Pipeline failed: " + (data.error || "unknown error"));
+        resetBtn();
+      }
+    })
+    .catch(function(err) {
+      addLog("WARN", "Polling error: " + err.message);
+    });
+}
+
+// ── Pipeline done ─────────────────────────────────────────────
+function pipelineDone(result) {
+  for (var i = 0; i < 4; i++) {
+    var p = document.getElementById("ps-" + i);
+    p.classList.remove("running"); p.classList.add("done");
+    p.querySelector(".st").textContent = "complete";
+  }
+  document.getElementById("prog-fill").style.width = "100%";
+  document.getElementById("prog-pct").textContent = "100%";
+  document.getElementById("prog-stage").textContent = "Complete";
+
+  if (result) {
+    document.getElementById("st-out").textContent = (result.width || "-") + "x" + (result.height || "-");
+    document.getElementById("st-rt").textContent = (result.processing_time_s || "-") + "s";
+    document.getElementById("m-method").textContent = (result.method || S.method).toUpperCase();
+    document.getElementById("m-fused-s").textContent = (result.width || "-") + " x " + (result.height || "-");
+  }
+
+  resetBtn();
+  showDownloadBtn(result);
+  setTimeout(renderFused, 300);
+}
+
+function resetBtn() {
+  var btn = document.getElementById("run-btn");
+  btn.disabled = false;
+  btn.innerHTML = "&#10003; COMPLETE &mdash; RUN AGAIN";
+}
+
+// ── Download button ───────────────────────────────────────────
+function showDownloadBtn(result) {
+  var area = document.getElementById("dl-area");
+  area.innerHTML = "";
+  var isReal = result && result.status !== "simulated" && result.output_file && result.output_file !== "simulation_no_output.tif";
+
+  var btn = document.createElement("button");
+  btn.className = "dl-btn " + (isReal ? "dl-real" : "dl-prev");
+
+  if (isReal) {
+    btn.textContent = "Download Fused GeoTIFF";
+    btn.onclick = function() {
+      window.open(API + "/download/" + S.jobId, "_blank");
+      addLog("INFO", "Downloading: " + result.output_file);
+    };
+    addLog("OK", "Real GeoTIFF ready — click Download to save it.");
+  } else {
+    btn.textContent = "Download Preview (PNG)";
+    btn.onclick = function() {
+      var cv = document.getElementById("cv-fused");
+      var a = document.createElement("a");
+      a.download = "pansharp_preview.png";
+      a.href = cv.toDataURL("image/png");
+      a.click();
+      addLog("INFO", "Preview PNG saved.");
+    };
+    addLog("WARN", "Running in simulation mode — preview PNG only.");
+    addLog("WARN", "Check nasrda_pansharpening_engine.py is in the same folder as server.py");
+  }
+
+  var note = document.createElement("div");
+  note.className = "dl-note";
+  note.textContent = isReal
+    ? "GeoTIFF with geographic coordinates — open in QGIS."
+    : "Upload .tif files and ensure engine is in same folder for real output.";
+
+  area.appendChild(btn);
+  area.appendChild(note);
+}
+
+// ── Fused canvas render ───────────────────────────────────────
+function renderFused() {
+  var cv = document.getElementById("cv-fused");
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  if (S.msData && S.msData !== "rgba" && S.panData && S.panData !== "rgba") {
+    renderBrovey(ctx, W, H);
+  } else if (S.msRGBA) {
+    renderRGBA(ctx, W, H);
+  } else {
+    drawFusedPH(ctx, W, H);
+  }
+  addLog("OK", "Fused preview rendered on canvas.");
+}
+
+function renderBrovey(ctx, W, H) {
+  var ms = S.msData, pan = S.panData;
+  var mW = S.msW, mH = S.msH, nb = S.msBands, pW = S.panW, pH = S.panH;
+  var b0 = ms[0], b1 = nb >= 3 ? ms[1] : ms[0], b2 = nb >= 3 ? ms[2] : ms[0], p0 = pan[0];
+  function pc(arr, p) { var s = Float64Array.from(arr).sort(); return s[Math.floor(s.length * (p / 100))]; }
+  function mk(arr) { var lo = pc(arr, 2), hi = pc(arr, 98), r = hi - lo + 1e-9; return function(v) { return Math.max(0, Math.min(1, (v - lo) / r)); }; }
+  var n0 = mk(b0), n1 = mk(b1), n2 = mk(b2), np = mk(p0);
+  var id = ctx.createImageData(W, H), d = id.data;
+  for (var cy = 0; cy < H; cy++) {
+    for (var cx = 0; cx < W; cx++) {
+      var msx = Math.floor((cx / W) * mW), msy = Math.floor((cy / H) * mH);
+      var psx = Math.floor((cx / W) * pW), psy = Math.floor((cy / H) * pH);
+      var mi = msy * mW + msx, pi = psy * pW + psx, di = (cy * W + cx) * 4;
+      var R = n0(b0[mi]), G = n1(b1[mi]), B = n2(b2[mi]), PAN = np(p0[pi]);
+      var sum = R + G + B + 1e-9;
+      d[di]   = Math.min(255, Math.round((R / sum) * PAN * 255));
+      d[di+1] = Math.min(255, Math.round((G / sum) * PAN * 255));
+      d[di+2] = Math.min(255, Math.round((B / sum) * PAN * 255));
+      d[di+3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+function renderRGBA(ctx, W, H) {
+  var src = S.msRGBA.data;
+  var id = ctx.createImageData(W, H), d = id.data;
+  for (var i = 0; i < W * H; i++) {
+    var si = i * 4, di = i * 4;
+    d[di]   = Math.min(255, Math.round((src[si]   - 20) * 1.2));
+    d[di+1] = Math.min(255, Math.round((src[si+1] - 15) * 1.22));
+    d[di+2] = Math.min(255, Math.round((src[si+2] - 10) * 1.18));
+    d[di+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+function drawFusedPH(ctx, W, H) {
+  var g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, "#1A4A28"); g.addColorStop(1, "#2A5C38");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.font = "11px monospace"; ctx.fillStyle = "rgba(29,184,126,.8)";
+  ctx.fillText("PAN-SHARPENED OUTPUT", 10, H - 12);
+}
+
+function drawPH(id, type) {
+  var cv = document.getElementById(id), ctx = cv.getContext("2d");
+  ctx.fillStyle = type === "pan" ? "#111" : "#0a1a10";
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.font = "12px monospace"; ctx.fillStyle = "#333"; ctx.textAlign = "center";
+  ctx.fillText("Upload " + type.toUpperCase() + " image", cv.width / 2, cv.height / 2);
+  ctx.textAlign = "left";
+}
+
+// ── Log ───────────────────────────────────────────────────────
+function addLog(level, msg) {
+  var now = new Date();
+  var ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(function(x) { return String(x).padStart(2, "0"); }).join(":");
+  var box = document.getElementById("log-box");
+  var cls = { INFO: "li", OK: "lk", WARN: "lw", ERR: "le" }[level] || "li";
+  var line = document.createElement("div");
+  line.className = "ll";
+  line.innerHTML = '<span class="lt">' + ts + '</span><span class="' + cls + '">[' + level + ']</span><span class="lm">' + msg + '</span>';
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() { document.getElementById("log-box").innerHTML = ""; }
+</script>
+</body>
+</html>

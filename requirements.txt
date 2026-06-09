@@ -1,0 +1,38 @@
+# NASRDA Satellite Image Preprocessing Engine — Python Dependencies
+# Install: pip install -r requirements.txt
+# Python 3.9+ required
+
+# ── Core Geospatial ──────────────────────────────────────────
+rasterio>=1.3.9          # Raster I/O, reprojection, masking (wraps GDAL)
+gdal>=3.6.0              # Geospatial Data Abstraction Library
+pyproj>=3.5.0            # Coordinate reference system transformations
+shapely>=2.0.0           # Geometric operations for AOI masking
+
+# ── Array & Dataset Processing ───────────────────────────────
+numpy>=1.24.0            # Pixel-level numerical operations
+xarray>=2023.1.0         # Multi-dimensional labelled dataset management
+dask[array]>=2023.3.0    # Parallel/scalable array processing
+dask[distributed]>=2023.3.0  # Distributed scheduler for large scenes
+
+# ── Cloud & Shadow Detection ─────────────────────────────────
+scikit-image>=0.21.0     # Otsu thresholding, morphological dilation
+s2cloudless>=1.5.0       # Sentinel-2 cloud probability ML model (optional)
+
+# ── Atmospheric Correction ───────────────────────────────────
+# For production-grade 6S correction, install one of:
+# Py6S>=1.9.2            # Python interface to 6S radiative transfer model
+# ACOLITE (standalone)   # Royal Belgian Institute of Natural Sciences
+
+# ── Utilities ────────────────────────────────────────────────
+scipy>=1.10.0            # Interpolation for gap filling
+matplotlib>=3.7.0        # Preview plotting and QA visualisation
+tqdm>=4.65.0             # Progress bars for batch processing
+click>=8.1.0             # CLI interface
+pydantic>=2.0.0          # Configuration validation
+
+# ── Development & Testing ────────────────────────────────────
+pytest>=7.3.0
+pytest-cov>=4.0.0
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.3.0
