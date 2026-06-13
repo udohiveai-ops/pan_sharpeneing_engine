@@ -42,6 +42,14 @@ def handle_options():
 def index():
     return send_from_directory(".", "nasrda_dashboard.html")
 
+@app.route("/dashboard.css")
+def dashboard_css():
+    return send_from_directory(".", "dashboard.css", mimetype="text/css")
+
+@app.route("/dashboard.js")
+def dashboard_js():
+    return send_from_directory(".", "dashboard.js", mimetype="application/javascript")
+
 # ── Serve favicon (stop 405 errors) ───────────────────────────────────────
 @app.route("/favicon.ico")
 def favicon():
