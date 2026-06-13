@@ -8,6 +8,27 @@ var S = {
   jobId: null, pollTimer: null, lastLogCount: 0
 };
 
+// ── Theme Setup ───────────────────────────────────────
+var savedTheme = localStorage.getItem("theme") || "dark";
+if (savedTheme === "light") {
+  document.body.classList.add("light-mode");
+}
+
+document.getElementById("theme-toggle").addEventListener("click", function() {
+  var body = document.body;
+  body.classList.toggle("light-mode");
+  var currentTheme = body.classList.contains("light-mode") ? "light" : "dark";
+  localStorage.setItem("theme", currentTheme);
+  
+  // Re-draw placeholders with correct colors for the active theme if no file is loaded
+  if (!S.msFile) drawPH("cv-ms", "ms");
+  if (!S.panFile) drawPH("cv-pan", "pan");
+  if (!S.jobId) {
+    var fusedCv = document.getElementById("cv-fused");
+    drawFusedPH(fusedCv.getContext("2d"), fusedCv.width, fusedCv.height);
+  }
+});
+
 // ── Init ──────────────────────────────────────────────
 addLog("INFO", "NASRDA Pan-Sharpening Engine v2.0.0 — ready.");
 addLog("INFO", "Upload MS and PAN images, select algorithm, then click RUN.");
@@ -301,18 +322,27 @@ function renderRGBA(ctx, W, H) {
 }
 
 function drawFusedPH(ctx, W, H) {
+  var isLight = document.body.classList.contains("light-mode");
   var g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, "#0A1A14"); g.addColorStop(1, "#142820");
+  if (isLight) {
+    g.addColorStop(0, "#f1f5f9"); g.addColorStop(1, "#e2e8f0");
+  } else {
+    g.addColorStop(0, "#0A1A14"); g.addColorStop(1, "#142820");
+  }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  ctx.font = "11px 'JetBrains Mono', monospace"; ctx.fillStyle = "rgba(29,184,126,0.5)";
+  ctx.font = "11px 'JetBrains Mono', monospace";
+  ctx.fillStyle = isLight ? "rgba(5,150,105,0.6)" : "rgba(29,184,126,0.5)";
   ctx.fillText("PAN-SHARPENED OUTPUT", 14, H - 14);
 }
 
 function drawPH(id, type) {
   var cv = document.getElementById(id), ctx = cv.getContext("2d");
-  ctx.fillStyle = type === "pan" ? "#0A0E18" : "#080E16";
+  var isLight = document.body.classList.contains("light-mode");
+  ctx.fillStyle = isLight ? (type === "pan" ? "#f1f5f9" : "#e2e8f0") : (type === "pan" ? "#0A0E18" : "#080E16");
   ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.font = "12px 'Inter', sans-serif"; ctx.fillStyle = "#2A3448"; ctx.textAlign = "center";
+  ctx.font = "12px 'Inter', sans-serif";
+  ctx.fillStyle = isLight ? "#64748b" : "#2A3448";
+  ctx.textAlign = "center";
   ctx.fillText("Upload " + type.toUpperCase() + " image", cv.width / 2, cv.height / 2);
   ctx.textAlign = "left";
 }
